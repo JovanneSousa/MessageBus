@@ -1,4 +1,4 @@
-﻿namespace auth.Infra.MessageBus
+﻿namespace Bus
 {
     public class RabbitSettings
     {

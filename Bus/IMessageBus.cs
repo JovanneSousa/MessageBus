@@ -1,6 +1,6 @@
-﻿using auth.Infra.Messages;
+﻿using Messages;
 
-namespace auth.Infra.MessageBus
+namespace Bus
 {
     public interface IMessageBus
     {

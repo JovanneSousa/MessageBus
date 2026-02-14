@@ -1,6 +1,6 @@
 ﻿using MediatR;
 
-namespace auth.Infra.Messages
+namespace Messages
 {
     public class Event : Message, INotification
     {

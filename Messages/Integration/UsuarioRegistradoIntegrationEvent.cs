@@ -1,4 +1,4 @@
-﻿namespace auth.Infra.Messages.Integration
+﻿namespace Messages.Integration
 {
     public class UsuarioRegistradoIntegrationEvent : IntegrationEvent
     {

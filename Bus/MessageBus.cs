@@ -1,11 +1,11 @@
-﻿using auth.Infra.MessageBus;
-using auth.Infra.Messages;
+﻿
+using Messages;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Text;
 using System.Text.Json;
 
-namespace Infra.MessageBus
+namespace Bus
 {
     public sealed class MessageBus : IMessageBus, IDisposable
     {

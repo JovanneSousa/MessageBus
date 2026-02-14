@@ -1,6 +1,4 @@
-﻿using auth.Domain.Entities;
-
-namespace auth.Infra.Messages.Integration
+﻿namespace Messages.Integration
 {
     public class EmailIntegrationEvent : IntegrationEvent
     {

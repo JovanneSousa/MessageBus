@@ -1,4 +1,4 @@
-﻿namespace auth.Infra.Messages
+﻿namespace Messages
 {
     public class Message
     {
