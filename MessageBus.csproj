@@ -4,6 +4,14 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	<PackageId>Jovane.MessageBus</PackageId>
+	<Version>1.0.0</Version>
+	<Authors>Jovane Sousa</Authors>
+	<Company>SeuNomeOuEmpresa</Company>
+	<Description>Library para integração com RabbitMQ usando MessageBus</Description>
+	<PackageTags>RabbitMQ;MessageBus;IntegrationEvent</PackageTags>
+	<RepositoryUrl>https://github.com/JovanneSousa/MessageBus</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>

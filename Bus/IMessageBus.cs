@@ -19,5 +19,13 @@ namespace Bus
             )
             where TRequest : IntegrationEvent
             where TResponse : ResponseMessage;
+
+        Task<IDisposable> RespondAsync<TRequest, TResponse>(
+            Func<TRequest, Task<TResponse>> responder,
+            CancellationToken ct
+            )
+            where TRequest : IntegrationEvent
+            where TResponse : ResponseMessage;
+            
     }
 }

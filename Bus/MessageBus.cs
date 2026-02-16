@@ -59,7 +59,7 @@ namespace Bus
                 routingKey: routingKey,
                 mandatory: false,
                 body: body,
-                basicProperties: geraPropriedades()
+                basicProperties: GeraPropriedades()
             );
         }
 
@@ -76,63 +76,165 @@ namespace Bus
 
             await EnsureExchangeAsync(exchange, ct);
 
-            var replyQueue = await _channel.QueueDeclareAsync(
-                 queue: "",
-                 durable: false,
-                 exclusive: true,
-                 autoDelete: true,
-                 arguments: null,
-                 cancellationToken: ct
-             );
+            var replyQueueName = await CreateReplyQueueAsync(ct);
 
             var tcs = new TaskCompletionSource<TResponse>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+                TaskCreationOptions.RunContinuationsAsynchronously
+                );
 
-            var consumer = new AsyncEventingBasicConsumer(_channel);
-
-            consumer.ReceivedAsync += async (_, ea) =>
-            {
-                if (ea.BasicProperties?.CorrelationId == correlationId)
-                {
-                    var json = Encoding.UTF8.GetString(ea.Body.ToArray());
-
-                    var response = JsonSerializer.Deserialize<TResponse>(json, _jsonOptions);
-
-                    if (response != null)
-                        tcs.TrySetResult(response);
-                }
-
-                await Task.CompletedTask;
-            };
+            var consumer = CreateReplyConsumer(correlationId, tcs);
 
             await _channel.BasicConsumeAsync(
-                queue: replyQueue.QueueName,
+                queue: replyQueueName,
                 autoAck: true,
                 consumer: consumer,
                 cancellationToken: ct
             );
 
-            var messageJson = JsonSerializer.Serialize(request, _jsonOptions);
-            var body = Encoding.UTF8.GetBytes(messageJson);
+            await PublishRequestAsync(
+                request, 
+                exchange, 
+                routingKey, 
+                replyQueueName, 
+                correlationId, 
+                ct
+                );
 
-            var properties = new BasicProperties
+            return await tcs.Task.WaitAsync(ct);
+        }
+
+        public async Task<IDisposable> RespondAsync<TRequest, TResponse>(
+                Func<TRequest, Task<TResponse>> responder,
+                CancellationToken ct
+            )
+            where TRequest : IntegrationEvent
+            where TResponse : ResponseMessage
+        {
+            var queueName = typeof(TRequest).Name.ToLowerInvariant();
+
+            await EnsureExchangeAsync(queueName, ct);
+
+            var consumer = new AsyncEventingBasicConsumer(_channel);
+
+            consumer.ReceivedAsync += async (_, ea) =>
+            {
+                try
+                {
+                    var json = Encoding.UTF8.GetString(ea.Body.ToArray());
+
+                    var request = JsonSerializer.Deserialize<TRequest>(
+                        json,
+                        _jsonOptions);
+
+                    if (request == null)
+                        return;
+
+                    var response = await responder(request);
+
+                    await PublishResponseAsync(
+                        response,
+                        ea.BasicProperties?.ReplyTo,
+                        ea.BasicProperties?.CorrelationId);
+                }
+                catch (Exception ex)
+                {
+                    // tratar exception
+                }
+            };
+
+            var consumerTag = await _channel.BasicConsumeAsync(
+                queue: queueName,
+                autoAck: true,
+                consumer: consumer
+                );
+
+            return new ConsumerDisposable(_channel, consumerTag);
+        }
+
+        private async Task PublishResponseAsync<TResponse>(
+            TResponse response,
+            string replyTo,
+            string correlationId
+            )
+        {
+            if (string.IsNullOrEmpty(replyTo))
+                return;
+
+            var json = JsonSerializer.Serialize(response, _jsonOptions);
+            var body = Encoding.UTF8.GetBytes(json);
+
+            var props = new BasicProperties
             {
                 CorrelationId = correlationId,
-                ReplyTo = replyQueue.QueueName,
-                ContentType = "application/json",
-                Type = request.MessageType
+                ContentType = "application/json"
             };
+
+            await _channel.BasicPublishAsync(
+                exchange: "", 
+                routingKey: replyTo,
+                mandatory: false,
+                basicProperties: props,
+                body: body);
+        }
+
+
+        private AsyncEventingBasicConsumer CreateReplyConsumer<TResponse>(
+            string correlationId, 
+            TaskCompletionSource<TResponse> tcs
+            )
+        {
+            var consumer = new AsyncEventingBasicConsumer(_channel);
+
+            consumer.ReceivedAsync += async (_, ea) =>
+            {
+                if (ea.BasicProperties?.CorrelationId != correlationId)
+                    return;
+
+                var json = Encoding.UTF8.GetString(ea.Body.ToArray());
+                var response = JsonSerializer.Deserialize<TResponse>(json, _jsonOptions);
+                if (response != null)
+                    tcs.TrySetResult(response);
+
+                await Task.CompletedTask;
+            };
+
+            return consumer;
+        }
+
+        private async Task<string> CreateReplyQueueAsync(CancellationToken ct)
+        {
+            var replyQueue = await _channel.QueueDeclareAsync(
+                    queue: "",
+                    durable: false,
+                    exclusive: true,
+                    autoDelete: true,
+                    arguments: null,
+                    cancellationToken: ct
+                );
+
+            return replyQueue.QueueName; 
+        }
+
+        private async Task PublishRequestAsync<TRequest>(
+                TRequest request,
+                string exchange,
+                string routingKey,
+                string replyQueueName,
+                string correlationId,
+                CancellationToken ct
+            )
+            where TRequest : IntegrationEvent
+        {
+            var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(request, _jsonOptions));
 
             await _channel.BasicPublishAsync(
                 exchange: exchange,
                 routingKey: routingKey,
                 mandatory: false,
-                basicProperties: properties,
+                basicProperties: GeraPropriedades(correlationId),
                 body: body,
                 cancellationToken: ct
             );
-
-            return await tcs.Task.WaitAsync(ct);
         }
 
         public void Dispose()
@@ -143,14 +245,39 @@ namespace Bus
                 _connection.Dispose();
         }
 
+        internal sealed class ConsumerDisposable : IDisposable
+        {
+            private readonly IChannel _channel;
+            private readonly string _consumerTag;
 
-        private BasicProperties geraPropriedades() =>
+            public ConsumerDisposable(IChannel channel, string consumerTag)
+            {
+                _channel = channel;
+                _consumerTag = consumerTag;
+            }
+
+            public void Dispose()
+            {
+                _channel.BasicCancelAsync(_consumerTag);
+            }
+        }
+
+        private BasicProperties GeraPropriedades() =>
             new BasicProperties
             {
                 ContentType = "application/json",
                 ContentEncoding = "utf-8",
                 DeliveryMode = DeliveryModes.Persistent
             };
+
+        private BasicProperties GeraPropriedades(string correlationId) =>
+             new BasicProperties
+             {
+                 CorrelationId = correlationId,
+                 ContentType = "application/json",
+                 ContentEncoding = "utf-8",
+                 DeliveryMode = DeliveryModes.Persistent
+             };
 
         private async Task EnsureExchangeAsync(string exchange, CancellationToken ct)
         {
@@ -163,7 +290,5 @@ namespace Bus
                 cancellationToken: ct
             );
         }
-
-
     }
 }
