@@ -6,7 +6,7 @@
     <Nullable>disable</Nullable>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 	<PackageId>Jovane.MessageBus</PackageId>
-	<Version>1.0.1</Version>
+	<Version>1.0.2</Version>
 	<Authors>Jovane Sousa</Authors>
 	<Company>SeuNomeOuEmpresa</Company>
 	<Description>Library para integração com RabbitMQ usando MessageBus</Description>

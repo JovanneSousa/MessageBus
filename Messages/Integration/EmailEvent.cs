@@ -9,5 +9,8 @@
         public string Body { get; set; }
         public Metadados Metadata {  get; set; }
 
+        public override string Exchange => throw new NotImplementedException();
+
+        public override string RoutingKey => throw new NotImplementedException();
     }
 }
