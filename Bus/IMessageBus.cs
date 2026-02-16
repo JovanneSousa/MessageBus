@@ -22,7 +22,7 @@ namespace Bus
 
         Task<IDisposable> RespondAsync<TRequest, TResponse>(
             Func<TRequest, Task<TResponse>> responder,
-            CancellationToken ct
+            CancellationToken ct = default
             )
             where TRequest : IntegrationEvent
             where TResponse : ResponseMessage;

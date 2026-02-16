@@ -105,7 +105,7 @@ namespace Bus
 
         public async Task<IDisposable> RespondAsync<TRequest, TResponse>(
                 Func<TRequest, Task<TResponse>> responder,
-                CancellationToken ct
+                CancellationToken ct = default
             )
             where TRequest : IntegrationEvent
             where TResponse : ResponseMessage
@@ -123,11 +123,15 @@ namespace Bus
                     var json = Encoding.UTF8.GetString(ea.Body.ToArray());
 
                     var request = JsonSerializer.Deserialize<TRequest>(
-                        json,
-                        _jsonOptions);
+                            json,
+                            _jsonOptions
+                        );
 
                     if (request == null)
+                    {
+                        await _channel.BasicNackAsync(ea.DeliveryTag, false, false);
                         return;
+                    }
 
                     var response = await responder(request);
 
@@ -135,16 +139,18 @@ namespace Bus
                         response,
                         ea.BasicProperties?.ReplyTo,
                         ea.BasicProperties?.CorrelationId);
+
+                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    // tratar exception
+                    await _channel.BasicNackAsync(ea.DeliveryTag, false, true);
                 }
             };
 
             var consumerTag = await _channel.BasicConsumeAsync(
                 queue: queueName,
-                autoAck: true,
+                autoAck: false,
                 consumer: consumer
                 );
 
