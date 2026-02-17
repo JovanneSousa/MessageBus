@@ -1,13 +1,12 @@
 ﻿using Messages;
-using System;
-using System.Collections.Generic;
-using System.Security.Authentication;
-using System.Text;
 
-namespace MessageBus.Bus
+namespace Bus
 {
     public interface IEventRouteResolver
     {
-        (string exchange, string routingKey) Resolve(IntegrationEvent @event);
+        (string exchange, string routingKey, string queue) Resolve<T>();
+        string ResolveExchange<T>();
+        string ResolveRoutingKey<T>();
+        string ResolveQueue<T>();
     }
 }

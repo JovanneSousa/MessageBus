@@ -5,16 +5,12 @@ namespace Bus
     public interface IMessageBus
     {
         Task PublishAsync<T>(
-            T message, 
-            string routingKey, 
-            string exchangeName, 
+            T message,  
             CancellationToken ct = default
             ) where T : IntegrationEvent;
 
         Task<TResponse> RequestAsync<TRequest, TResponse>(
             TRequest request,
-            string exchange,
-            string routingKey,
             CancellationToken ct = default
             )
             where TRequest : IntegrationEvent

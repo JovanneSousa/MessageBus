@@ -1,5 +1,4 @@
-﻿
-using Messages;
+﻿using Messages;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Text;
@@ -12,11 +11,13 @@ namespace Bus
         private readonly IConnection _connection;
         private readonly IChannel _channel;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly IEventRouteResolver _routeResolver;
 
-        public MessageBus(IConnection connection, IChannel channel)
+        public MessageBus(IConnection connection, IChannel channel, IEventRouteResolver routeResolver)
         {
             _connection = connection;
             _channel = channel;
+            _routeResolver = routeResolver;
 
             _jsonOptions = new JsonSerializerOptions
             {
@@ -24,38 +25,21 @@ namespace Bus
             };
         }
 
-        public static async Task<MessageBus> CreateAsync(
-            string amqpUri,
+        public async Task PublishAsync<T>(
+            T message,
             CancellationToken ct = default
             ) 
+            where T : IntegrationEvent
         {
-            var factory = new ConnectionFactory 
-            { 
-                Uri = new Uri(amqpUri),
-                AutomaticRecoveryEnabled = true,
-                TopologyRecoveryEnabled = true
-            };
+            var (exchange, routingKey, queue) = _routeResolver.Resolve<T>();
 
-            var connection = await factory.CreateConnectionAsync(ct);
-            var channel = await connection.CreateChannelAsync();
-
-            return new MessageBus(connection, channel);
-        }
-
-        public async Task PublishAsync<T>(
-            T message, 
-            string routingKey, 
-            string exchangeName, 
-            CancellationToken ct = default
-            ) where T : IntegrationEvent
-        {
             var json = JsonSerializer.Serialize(message, _jsonOptions);
             var body = Encoding.UTF8.GetBytes(json);
 
-            await EnsureExchangeAsync(exchangeName, ct);
+            await EnsureAllElementsAsync(exchange, queue, routingKey, ct);
 
             await _channel.BasicPublishAsync(
-                exchange: exchangeName,
+                exchange: exchange,
                 routingKey: routingKey,
                 mandatory: false,
                 body: body,
@@ -65,16 +49,16 @@ namespace Bus
 
         public async Task<TResponse> RequestAsync<TRequest, TResponse>(
             TRequest request, 
-            string exchange, 
-            string routingKey,
             CancellationToken ct = default
             )
             where TRequest : IntegrationEvent
             where TResponse : ResponseMessage
         {
+            var (exchange, routingKey, queue) = _routeResolver.Resolve<TRequest>();
+
             var correlationId = Guid.NewGuid().ToString();
 
-            await EnsureExchangeAsync(exchange, ct);
+            await EnsureAllElementsAsync(exchange, queue, routingKey, ct);
 
             var replyQueueName = await CreateReplyQueueAsync(ct);
 
@@ -110,9 +94,9 @@ namespace Bus
             where TRequest : IntegrationEvent
             where TResponse : ResponseMessage
         {
-            var queueName = typeof(TRequest).Name.ToLowerInvariant();
+            var (exchange, routingKey, queue) = _routeResolver.Resolve<TRequest>();
 
-            await EnsureExchangeAsync(queueName, ct);
+            await EnsureAllElementsAsync(exchange, queue, routingKey, ct);
 
             var consumer = new AsyncEventingBasicConsumer(_channel);
 
@@ -149,7 +133,7 @@ namespace Bus
             };
 
             var consumerTag = await _channel.BasicConsumeAsync(
-                queue: queueName,
+                queue: queue,
                 autoAck: false,
                 consumer: consumer
                 );
@@ -285,6 +269,18 @@ namespace Bus
                  DeliveryMode = DeliveryModes.Persistent
              };
 
+        private async Task EnsureAllElementsAsync(
+            string exchange, 
+            string queue, 
+            string routingKey, 
+            CancellationToken ct
+            )
+        {
+            await EnsureExchangeAsync(exchange, ct);
+            await EnsureQueueAsync(queue, ct);
+            await EnsureBindingAsync(exchange, routingKey, queue, ct);
+        }
+
         private async Task EnsureExchangeAsync(string exchange, CancellationToken ct)
         {
             await _channel.ExchangeDeclareAsync(
@@ -295,6 +291,33 @@ namespace Bus
                 arguments: null,
                 cancellationToken: ct
             );
+        }
+
+        private async Task EnsureQueueAsync(string queueName, CancellationToken ct)
+        {
+            await _channel.QueueDeclareAsync(
+                queue: queueName,
+                durable: true,    
+                exclusive: false,   
+                autoDelete: false,  
+                arguments: null,
+                cancellationToken: ct
+                );
+        }
+
+        private async Task EnsureBindingAsync(
+            string exchange,
+            string routingKey, 
+            string queueName, 
+            CancellationToken ct)
+        {
+            await _channel.QueueBindAsync(
+                queue: queueName,
+                exchange: exchange,
+                routingKey: routingKey,
+                arguments: null,
+                cancellationToken: ct
+                );
         }
     }
 }
