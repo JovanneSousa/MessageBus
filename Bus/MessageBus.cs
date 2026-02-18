@@ -221,7 +221,7 @@ namespace Bus
                 exchange: exchange,
                 routingKey: routingKey,
                 mandatory: false,
-                basicProperties: GeraPropriedades(correlationId),
+                basicProperties: GeraPropriedades(correlationId, replyQueueName),
                 body: body,
                 cancellationToken: ct
             );
@@ -260,9 +260,10 @@ namespace Bus
                 DeliveryMode = DeliveryModes.Persistent
             };
 
-        private BasicProperties GeraPropriedades(string correlationId) =>
+        private BasicProperties GeraPropriedades(string correlationId, string replyQueueName) =>
              new BasicProperties
              {
+                 ReplyTo = replyQueueName,
                  CorrelationId = correlationId,
                  ContentType = "application/json",
                  ContentEncoding = "utf-8",
