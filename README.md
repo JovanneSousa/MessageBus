@@ -1,212 +1,80 @@
-# 📦 Jovane.MessageBus
+# 🚌 Jovane.MessageBus
 
-Uma biblioteca leve para comunicação assíncrona e Request/Response usando **RabbitMQ**, baseada em **Integration Events** e integrada ao ecossistema **.NET Dependency Injection**.
-
-Permite implementar rapidamente:
-
-- ✅ Publish/Subscribe (Event Driven)
-- ✅ Request/Response via RabbitMQ
-- ✅ Consumers desacoplados
-- ✅ Integração com MediatR
-- ✅ Serialização JSON automática
-- ✅ Recuperação automática de conexão
+Uma biblioteca de infraestrutura robusta e leve para facilitar a comunicação assíncrona em arquiteturas distribuídas .NET, utilizando **RabbitMQ**.
 
 ---
 
-## 🚀 Instalação
+## 🌟 Funcionalidades
 
-Via NuGet:
-
-```bash
-dotnet add package Jovane.MessageBus
-```
-
----
-
-## ⚙️ Configuração
-
-Adicione no `appsettings.json`:
-
-```json
-{
-  "rabbit": {
-    "url": "amqp://guest:guest@localhost:5672",
-    "exchange": "app.exchange"
-  }
-}
-```
+*   **Abstração do RabbitMQ:** Esconde a complexidade de canais, conexões e exchanges.
+*   **Publish/Subscribe:** Disparo de eventos de integração para múltiplos consumidores.
+*   **Request/Response:** Comunicação síncrona sobre mensageria (RPC), com filas de resposta temporárias e exclusivas.
+*   **Injeção de Dependência:** Integração nativa com `IServiceCollection`.
+*   **Resiliência:** Suporte a auto-recovery de conexão.
+*   **Tipagem Forte:** Utiliza classes C# para definir eventos e mensagens de integração.
 
 ---
 
-## 🔧 Registro no Dependency Injection
+## 🏗️ Estrutura da Biblioteca
+
+*   **Bus:** Contém a interface `IMessageBus` e sua implementação principal.
+*   **Messages:** Define as classes base `IntegrationEvent` e `ResponseMessage`.
+*   **Configuration:** Extensões para facilitar o registro da biblioteca no `Program.cs`.
+
+---
+
+## 🚀 Como Utilizar
+
+### 1. Registro no Container de DI
+No arquivo `Program.cs` de qualquer serviço:
 
 ```csharp
 builder.Services.AddRabbitConfiguration(builder.Configuration);
 ```
 
-Isso registra automaticamente:
-
+### 2. Publicando um Evento (Fire and Forget)
 ```csharp
-IMessageBus
+public class PedidoCriadoEvent : IntegrationEvent { ... }
+
+// No seu serviço:
+await _messageBus.PublishAsync(new PedidoCriadoEvent(pedidoId));
 ```
 
-como Singleton.
-
----
-
-## 📤 Publicando eventos (Publish)
-
-Crie um evento:
+### 3. Padrão Request/Response (Síncrono via Bus)
+Utilizado quando um serviço precisa de uma resposta imediata de outro sistema.
 
 ```csharp
-public class OrderCreatedEvent : IntegrationEvent
-{
-    public Guid OrderId { get; set; }
-}
-```
+// Enviando a requisição
+var response = await _messageBus.RequestAsync<UsuarioRegistradoEvent, ResponseMessage>(meuEvento);
 
-Publicação:
-
-```csharp
-await messageBus.PublishAsync(
-    new OrderCreatedEvent { OrderId = Guid.NewGuid() },
-    routingKey: "order.created",
-    exchangeName: "orders"
-);
-```
-
----
-
-## 🔄 Request / Response
-
-### Request
-
-```csharp
-var response = await messageBus.RequestAsync<CreateOrderRequest, CreateOrderResponse>(
-    request,
-    exchange: "orders",
-    routingKey: "order.create"
-);
-```
-
----
-
-### Responder (Consumer)
-
-```csharp
-await messageBus.RespondAsync<CreateOrderRequest, CreateOrderResponse>(
-    async request =>
-    {
-        return new CreateOrderResponse(...);
-    });
-```
-
-A fila é criada automaticamente baseada no nome do request.
-
----
-
-## 🧠 Conceitos
-
-### IntegrationEvent
-Evento base para comunicação entre serviços.
-
-```csharp
-public abstract class IntegrationEvent : Event
-{
+if (response.ValidationResult.IsValid) {
+    // Sucesso na integração
 }
 ```
 
 ---
 
-### ResponseMessage
-Padroniza respostas incluindo validações.
+## 📊 Fluxo de Trabalho (Request/Response)
 
-```csharp
-public class ResponseMessage
-{
-    public ValidationResult ValidationResult { get; set; }
-}
+```text
+[Serviço A] --(Publica na Fila Principal)--> [Exchange] --> [Fila de Trabalho]
+                                                                  |
+                                                           [Serviço B (Consumidor)]
+                                                                  |
+[Serviço A] <--(Retorna via Fila de Resposta)-- [Exchange] <------|
 ```
 
 ---
 
-## 🏗 Arquitetura
+## 🛠️ Tecnologias e Dependências
 
-A biblioteca implementa:
-
-- Exchange do tipo **Topic**
-- CorrelationId automático
-- Reply Queue temporária
-- Persistent Messages
-- Auto Recovery do RabbitMQ
-
-Fluxo Request/Response:
-
-```
-Service A → Exchange → Queue → Consumer
-                     ↓
-                Response Queue
-                     ↓
-                  Service A
-```
-
----
-
-## 🔒 Recursos internos
-
-- Serialização JSON camelCase
-- ACK/NACK automático
-- Retry via requeue
-- Disposable consumer handler
-- Reply queues exclusivas e temporárias
-
----
-
-## 📋 Requisitos
-
-- .NET 8+ (recomendado)
-- RabbitMQ 3.12+
-
----
-
-## 💡 Boas práticas
-
-✅ Use IntegrationEvents pequenos  
-✅ Evite enviar entidades completas  
-✅ Prefira eventos imutáveis  
-✅ Versione eventos quando necessário
-
----
-
-## 📌 Exemplo de Arquitetura
-
-Ideal para:
-
-- Microservices
-- Modular Monolith
-- Event Driven Architecture
-- CQRS
-
----
-
-## 🧩 Dependências
-
-- RabbitMQ.Client
-- MediatR
-- FluentValidation
-- Microsoft.Extensions.*
+*   **RabbitMQ.Client:** Driver oficial do RabbitMQ para .NET.
+*   **Polly:** (Opcional/Interno) Para políticas de retry e resiliência.
+*   **Newtonsoft.Json / System.Text.Json:** Para serialização de mensagens.
 
 ---
 
 ## 👨‍💻 Autor
 
-**Jovane Sousa**
-
-GitHub:  
-https://github.com/JovanneSousa/MessageBus
-
----
-
-## 📄 Licença
-
-MIT
+**Jovane Sousa**  
+Biblioteca criada para padronizar a comunicação entre microserviços e estudos de arquitetura distribuída.
