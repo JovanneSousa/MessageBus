@@ -1,5 +1,4 @@
-﻿using Messages;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 
 namespace Bus
 {
