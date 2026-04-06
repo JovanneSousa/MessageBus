@@ -36,7 +36,7 @@ namespace Bus
             var json = JsonSerializer.Serialize(message, _jsonOptions);
             var body = Encoding.UTF8.GetBytes(json);
 
-            await EnsureAllElementsAsync(exchange, queue, routingKey, ct);
+            await EnsureAllElementsAsync(exchange, queue, routingKey, ct, false);
 
             await _channel.BasicPublishAsync(
                 exchange: exchange,
@@ -274,12 +274,16 @@ namespace Bus
             string exchange, 
             string queue, 
             string routingKey, 
-            CancellationToken ct
+            CancellationToken ct,
+            bool declareQueue = true
             )
         {
             await EnsureExchangeAsync(exchange, ct);
-            await EnsureQueueAsync(queue, ct);
-            await EnsureBindingAsync(exchange, routingKey, queue, ct);
+            if(declareQueue)
+            {
+                await EnsureQueueAsync(queue, ct);
+                await EnsureBindingAsync(exchange, routingKey, queue, ct);
+            }
         }
 
         private async Task EnsureExchangeAsync(string exchange, CancellationToken ct)
